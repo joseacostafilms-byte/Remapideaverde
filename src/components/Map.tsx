@@ -9,19 +9,32 @@ import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Leaf } from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-// Fix for leaflet default icon issues in some bundlers
-const customIconMarkup = renderToStaticMarkup(
-  <div className="bg-brand-primary p-2 rounded-full shadow-lg border-2 border-white text-white">
-    <Leaf size={18} />
-  </div>
-);
+const createMarkerIcon = (initiative: Initiative) => {
+  const iconMarkup = renderToStaticMarkup(
+    <div className="relative group">
+      {initiative.logoUrl ? (
+        <div className="w-10 h-10 rounded-full border-2 border-white shadow-lg overflow-hidden bg-white">
+          <img src={initiative.logoUrl} className="w-full h-full object-cover" alt="" />
+        </div>
+      ) : (
+        <div className="bg-brand-primary p-2 rounded-full shadow-lg border-2 border-white text-white">
+          <Leaf size={18} />
+        </div>
+      )}
+      {/* Small flag indicator */}
+      <div className="absolute -bottom-1 -right-1 w-5 h-4 rounded-sm overflow-hidden border border-white shadow-sm">
+        <img src={`https://flagcdn.com/w20/${initiative.country.toLowerCase()}.png`} alt="" className="w-full h-full object-cover" />
+      </div>
+    </div>
+  );
 
-const customIcon = L.divIcon({
-  html: customIconMarkup,
-  className: 'custom-leaflet-icon',
-  iconSize: [34, 34],
-  iconAnchor: [17, 17],
-});
+  return L.divIcon({
+    html: iconMarkup,
+    className: 'custom-leaflet-icon',
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+};
 
 interface MapProps {
   initiatives: Initiative[];
@@ -72,7 +85,7 @@ export default function AppMap({ initiatives, onSelectInitiative, center, zoom =
           <Marker 
             key={initiative.id} 
             position={[initiative.lat, initiative.lng]} 
-            icon={customIcon}
+            icon={createMarkerIcon(initiative)}
             eventHandlers={{
               click: () => onSelectInitiative?.(initiative),
             }}

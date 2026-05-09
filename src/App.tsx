@@ -24,20 +24,21 @@ enum View {
 interface InitiativeCardProps {
   initiative: Initiative;
   onSelect: (i: Initiative) => void;
+  onEdit?: (i: Initiative) => void;
+  isOwner?: boolean;
   key?: string;
 }
 
-function AppInitiativeCard({ initiative, onSelect }: InitiativeCardProps) {
+function AppInitiativeCard({ initiative, onSelect, onEdit, isOwner }: InitiativeCardProps) {
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      onClick={() => onSelect(initiative)}
-      className="group bg-white rounded-3xl p-5 border border-slate-100 hover:border-brand-primary/20 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center gap-6"
+      className="group bg-white rounded-3xl p-5 border border-slate-100 hover:border-brand-primary/20 hover:shadow-xl transition-all duration-300 flex items-center gap-6"
     >
       {/* Flag Container */}
-      <div className="shrink-0">
+      <div className="shrink-0 cursor-pointer" onClick={() => onSelect(initiative)}>
         <div className="w-12 h-8 rounded-lg overflow-hidden shadow-sm border border-slate-50">
           <img 
             src={`https://flagcdn.com/w80/${initiative.country.toLowerCase()}.png`} 
@@ -48,7 +49,7 @@ function AppInitiativeCard({ initiative, onSelect }: InitiativeCardProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onSelect(initiative)}>
         <h3 className="text-xl font-bold text-slate-800 leading-tight group-hover:text-brand-primary transition-colors truncate">
           {initiative.name}
         </h3>
@@ -63,15 +64,32 @@ function AppInitiativeCard({ initiative, onSelect }: InitiativeCardProps) {
         </div>
       </div>
 
-      {/* Action (Hidden on mobile, visible on group hover) */}
-      <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 text-slate-400 group-hover:bg-brand-primary group-hover:text-white transition-all">
-        <ChevronRight size={18} />
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        {isOwner && (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit?.(initiative);
+            }}
+            className="p-3 bg-slate-50 text-slate-400 hover:bg-brand-light hover:text-brand-primary rounded-xl transition-all"
+            title="Editar Iniciativa"
+          >
+            <ShieldCheck size={18} />
+          </button>
+        )}
+        <div 
+          onClick={() => onSelect(initiative)}
+          className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 text-slate-400 group-hover:bg-brand-primary group-hover:text-white transition-all cursor-pointer"
+        >
+          <ChevronRight size={18} />
+        </div>
       </div>
     </motion.div>
   );
 }
 
-function InitiativeGrid({ initiatives, onSelect }: { initiatives: Initiative[], onSelect: (i: Initiative) => void }) {
+function InitiativeGrid({ initiatives, onSelect, onEdit, currentUser }: { initiatives: Initiative[], onSelect: (i: Initiative) => void, onEdit: (i: Initiative) => void, currentUser: User | null }) {
   return (
     <section id="initiatives-section" className="py-32 space-y-20 relative scroll-mt-24">
       <div className="absolute top-0 right-0 w-96 h-96 bg-brand-primary/5 rounded-full blur-[120px] -z-10" />
@@ -91,8 +109,14 @@ function InitiativeGrid({ initiatives, onSelect }: { initiatives: Initiative[], 
       </div>
 
       <div className="flex flex-col gap-8">
-        {initiatives.slice(0, 6).map(initiative => (
-          <AppInitiativeCard key={initiative.id} initiative={initiative} onSelect={onSelect} />
+        {initiatives.slice(0, 6).map((initiative) => (
+          <AppInitiativeCard 
+            key={initiative.id} 
+            initiative={initiative} 
+            onSelect={onSelect} 
+            onEdit={onEdit}
+            isOwner={currentUser?.uid === initiative.userId}
+          />
         ))}
       </div>
       
@@ -395,6 +419,8 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+  const [editingInitiative, setEditingInitiative] = useState<Initiative | null>(null);
 
   const handleSearch = (q: string) => {
     if (q === 'register') {
@@ -409,10 +435,6 @@ export default function App() {
     if (!element) return;
 
     try {
-      // html2canvas doesn't support oklch colors well (standard in Tailwind 4)
-      // We force basic colors for the capture phase
-      element.classList.add('pdf-capture-mode');
-      
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
@@ -421,43 +443,109 @@ export default function App() {
         onclone: (clonedDoc) => {
           const el = clonedDoc.getElementById('initiative-detail-card');
           if (el) {
-            // Recursively convert oklch colors to standard hex/rgb in the clone
-            // because html2canvas/jsPDF don't support modern oklch format
-            const allElements = el.querySelectorAll('*');
+            // 1. Remove all external stylesheets and style tags
+            // This is the primary source of oklch values in Tailwind 4
+            const links = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
+            links.forEach(l => l.remove());
+            const styles = clonedDoc.querySelectorAll('style');
+            styles.forEach(s => s.remove());
+
+            // 2. Traverse ALL elements in the clone to strip oklch from inline styles
+            // html2canvas fails when it sees oklch in any style string it parses
+            const allElements = clonedDoc.querySelectorAll('*');
             allElements.forEach((node) => {
               const htmlNode = node as HTMLElement;
-              const style = window.getComputedStyle(htmlNode);
               
-              const checkOklch = (prop: string) => {
-                const val = (htmlNode.style as any)[prop] || style.getPropertyValue(prop);
-                return val && val.includes('oklch');
-              };
-
-              // Force standard colors for common problematic styles
-              if (checkOklch('color')) htmlNode.style.color = '#1e293b';
-              if (checkOklch('background-color')) {
-                 if (htmlNode.classList.contains('bg-brand-primary')) htmlNode.style.backgroundColor = '#047857';
-                 else if (htmlNode.classList.contains('bg-brand-light')) htmlNode.style.backgroundColor = '#ecfdf5';
-                 else htmlNode.style.backgroundColor = '#ffffff';
+              // Clean up inline styles
+              if (htmlNode.style && htmlNode.style.cssText.includes('oklch')) {
+                // Simple regex replacement to swap oklch(any) with a neutral hex
+                // html2canvas parser won't crash if it sees #hex
+                htmlNode.style.cssText = htmlNode.style.cssText.replace(/oklch\([^)]+\)/g, '#1e293b');
               }
-              if (checkOklch('border-color')) htmlNode.style.borderColor = '#e2e8f0';
+
+              // Also check specifically for common color properties that might be resolved as oklch
+              const colorProps = ['color', 'backgroundColor', 'borderColor', 'fill', 'stroke'];
+              colorProps.forEach(prop => {
+                const val = (htmlNode.style as any)[prop];
+                if (val && val.includes('oklch')) {
+                  (htmlNode.style as any)[prop] = '#1e293b';
+                }
+              });
+
+              // Force layout styles that might be lost from removing stylesheets
+              if (htmlNode.classList.contains('flex')) htmlNode.style.display = 'flex';
+              if (htmlNode.classList.contains('grid')) htmlNode.style.display = 'grid';
+              
+              // Fix brand colors specifically
+              if (htmlNode.classList.contains('bg-brand-primary')) htmlNode.style.backgroundColor = '#047857';
+              if (htmlNode.classList.contains('bg-brand-light')) htmlNode.style.backgroundColor = '#ecfdf5';
+              if (htmlNode.classList.contains('text-brand-primary')) htmlNode.style.color = '#047857';
+              if (htmlNode.classList.contains('bg-white')) htmlNode.style.backgroundColor = '#ffffff';
+              
+              // Remove shadows and filters as they often use oklch in Tailwind 4
+              htmlNode.style.boxShadow = 'none';
+              htmlNode.style.filter = 'none';
+              htmlNode.style.backdropFilter = 'none';
             });
+
+            // 3. Inject a PDF-safe style block that ONLY uses HEX/RGB
+            const style = clonedDoc.createElement('style');
+            style.innerHTML = `
+              #initiative-detail-card {
+                background: #ffffff !important;
+                color: #1e293b !important;
+                font-family: sans-serif !important;
+                padding: 40px !important;
+                width: 1000px !important;
+                margin: 0 auto !important;
+              }
+              * { border-color: #e2e8f0 !important; }
+              .grid { display: grid !important; }
+              .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+              .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+              .flex { display: flex !important; }
+              .items-center { align-items: center !important; }
+              .justify-center { justify-content: center !important; }
+              .gap-4 { gap: 1rem !important; }
+              .gap-10 { gap: 2.5rem !important; }
+              .p-8 { padding: 32px !important; }
+              .p-12 { padding: 48px !important; }
+              .rounded-3xl { border-radius: 24px !important; }
+              .rounded-2xl { border-radius: 16px !important; }
+              .border { border: 1px solid #e2e8f0 !important; }
+              .font-bold { font-weight: 700 !important; }
+              .font-black { font-weight: 900 !important; }
+              .text-xs { font-size: 12px !important; }
+              .text-sm { font-size: 14px !important; }
+              .text-lg { font-size: 18px !important; }
+              .text-xl { font-size: 20px !important; }
+              .text-2xl { font-size: 24px !important; }
+              .text-3xl { font-size: 30px !important; }
+              .text-4xl { font-size: 36px !important; }
+              .text-5xl { font-size: 48px !important; }
+              .w-full { width: 100% !important; }
+              .h-full { height: 100% !important; }
+              .object-cover { object-fit: cover !important; }
+              .aspect-video { aspect-ratio: 16 / 9 !important; }
+              .overflow-hidden { overflow: hidden !important; }
+              button { display: none !important; }
+              .video-overlay { display: none !important; }
+            `;
+            clonedDoc.head.appendChild(style);
           }
         }
       });
-      
-      element.classList.remove('pdf-capture-mode');
       
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`IdeaVerde_${initiative.name.replace(/\s+/g, '_')}.pdf`);
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, 280));
+      pdf.save(`EcoIniciativa_${initiative.name.replace(/\s+/g, '_')}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Error generando el PDF. Asegúrate de permitir el acceso a imágenes externas.');
+      alert('Hubo un problema al generar el PDF. Esto suele deberse a que el navegador no soporta ciertas funciones de color modernas. Intenta usar Chrome o Safari actualizado.');
     }
   };
 
@@ -491,10 +579,12 @@ export default function App() {
         // Check if user is admin
         try {
           const adminDoc = await getDoc(doc(db, 'admins', u.uid));
-          setIsAdmin(adminDoc.exists());
+          const isEmailAdmin = u.email === 'joseacostafilms@gmail.com';
+          setIsAdmin(adminDoc.exists() || isEmailAdmin);
         } catch (error) {
           console.error("Error checking admin status:", error);
-          setIsAdmin(false);
+          const isEmailAdmin = u.email === 'joseacostafilms@gmail.com';
+          setIsAdmin(isEmailAdmin);
         }
 
         // Sync user profile to Firestore
@@ -554,18 +644,19 @@ export default function App() {
     return () => unsubscribeFirestore();
   }, [user, isAdmin]);
 
-  const handleFirestoreError = (error: any, operationType: FirestoreErrorInfo['operationType'], path: string) => {
+  const handleFirestoreError = (error: unknown, operationType: FirestoreErrorInfo['operationType'], path: string | null) => {
     const errInfo: FirestoreErrorInfo = {
-      error: error.message || String(error),
-      operationType,
-      path,
+      error: error instanceof Error ? error.message : String(error),
       authInfo: {
         userId: auth.currentUser?.uid,
         email: auth.currentUser?.email,
         emailVerified: auth.currentUser?.emailVerified,
-      }
+      },
+      operationType,
+      path
     };
-    console.error('Firestore Error:', JSON.stringify(errInfo));
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
   };
 
   const handleLogin = async () => {
@@ -577,22 +668,32 @@ export default function App() {
     }
   };
 
-  const handleCreateInitiative = async (data: any) => {
+  const handleSaveInitiative = async (data: any) => {
     if (!user) return;
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'initiatives'), {
-        ...data,
-        userId: user.uid,
-        status: InitiativeStatus.PENDING,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      if (editingInitiative) {
+        await setDoc(doc(db, 'initiatives', editingInitiative.id), {
+          ...editingInitiative,
+          ...data,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        alert('¡Iniciativa actualizada con éxito!');
+      } else {
+        await addDoc(collection(db, 'initiatives'), {
+          ...data,
+          userId: user.uid,
+          status: InitiativeStatus.PENDING,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        alert('¡Iniciativa registrada con éxito! Estará visible una vez que sea aprobada por un administrador.');
+      }
       setIsFormOpen(false);
-      alert('¡Iniciativa registrada con éxito! Estará visible una vez que sea aprobada por un administrador.');
+      setEditingInitiative(null);
     } catch (error) {
-      handleFirestoreError(error, 'create', 'initiatives');
-      alert('Error al registrar la iniciativa. Verifica los datos.');
+      handleFirestoreError(error, editingInitiative ? 'update' : 'create', 'initiatives');
+      alert('Error al guardar la iniciativa. Verifica los datos.');
     } finally {
       setSubmitting(false);
     }
@@ -618,231 +719,200 @@ export default function App() {
       <Navbar 
         user={user} 
         isAdmin={isAdmin} 
+        view={view}
         onAdminClick={() => isAdmin ? setView(View.ADMIN) : setIsAdminLoginOpen(true)} 
         onRegisterClick={() => setIsFormOpen(true)}
+        onLogoClick={() => setView(View.MAP)}
       />
 
-      <Hero onSearch={(q) => q === 'register' ? setIsFormOpen(true) : setSearchQuery(q)} />
+      {view !== View.ADMIN && (
+        <Hero onSearch={(q) => q === 'register' ? setIsFormOpen(true) : setSearchQuery(q)} />
+      )}
 
       <main className="flex-1 flex flex-col max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-12">
-        
-        {/* Admin Login Modal */}
-        <AnimatePresence>
-          {isAdminLoginOpen && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
-            >
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl space-y-6"
-              >
-                <div className="text-center space-y-2">
-                  <div className="w-16 h-16 bg-brand-light rounded-3xl flex items-center justify-center text-brand-primary mx-auto">
-                    <ShieldCheck size={32} />
-                  </div>
-                  <h2 className="text-2xl font-black text-slate-800">Acceso Maestro</h2>
-                  <p className="text-slate-500 font-medium text-sm">Panel de Administración Dedicado</p>
-                </div>
-
-                <form onSubmit={handleAdminLogin} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Usuario</label>
-                    <input 
-                      type="text"
-                      value={adminCredentials.username}
-                      onChange={(e) => setAdminCredentials(prev => ({ ...prev, username: e.target.value }))}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-brand-primary/5 focus:border-brand-primary transition-all font-medium"
-                      placeholder="Admin"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Contraseña</label>
-                    <input 
-                      type="password"
-                      value={adminCredentials.password}
-                      onChange={(e) => setAdminCredentials(prev => ({ ...prev, password: e.target.value }))}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-brand-primary/5 focus:border-brand-primary transition-all font-medium"
-                      placeholder="••••"
-                      required
-                    />
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <button 
-                      type="button"
-                      onClick={() => setIsAdminLoginOpen(false)}
-                      className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
-                    >
-                      Cancelar
-                    </button>
-                    <button 
-                      type="submit"
-                      className="flex-2 py-4 bg-brand-primary text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-brand-secondary transition-all shadow-lg shadow-brand-primary/20"
-                    >
-                      Entrar al Panel
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {view === View.ADMIN && (
-          <div className="mb-12">
+        {view === View.ADMIN ? (
+          <div className="mb-24">
             <AdminPanel 
               onClose={() => setView(View.MAP)} 
               user={user}
               isAdmin={isAdmin}
             />
           </div>
-        )}
+        ) : (
+          <>
+            <HowItWorks />
 
-        <HowItWorks />
-
-        <ImpactStats />
-        
-        <section id="explorer-section" className="flex-1 relative flex flex-col lg:flex-row gap-6 mb-12 scroll-mt-24">
-          <AnimatePresence mode="wait">
-            {view === View.MAP ? (
-              <motion.div 
-                key="map-container"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex-1 flex flex-col lg:flex-row gap-6 h-[80vh] min-h-[600px]"
-              >
-                {/* Sidebar List */}
-                <motion.div 
-                  initial={false}
-                  animate={{ width: isSidebarOpen ? '380px' : '0px', opacity: isSidebarOpen ? 1 : 0 }}
-                  className="hidden lg:flex flex-col bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative"
-                >
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <div>
-                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <Filter size={16} className="text-brand-primary" /> Directorio
-                      </h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{filteredInitiatives.length} Resultados</p>
-                    </div>
-                    <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-                      <ChevronLeft size={20} />
-                    </button>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                    {filteredInitiatives.map(initiative => (
-                      <button 
-                        key={initiative.id}
-                        onClick={() => setSelectedInitiative(initiative)}
-                        className={`w-full text-left p-4 rounded-2xl border transition-all group ${selectedInitiative?.id === initiative.id ? 'border-brand-primary bg-brand-light font-medium' : 'border-slate-100 hover:border-brand-primary/30 hover:bg-slate-50'}`}
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <img 
-                            src={`https://flagcdn.com/w20/${initiative.country.toLowerCase()}.png`} 
-                            alt="flag" 
-                            className="w-5 h-auto rounded-sm"
-                          />
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{initiative.category}</span>
+            <ImpactStats />
+            
+            <section id="explorer-section" className={`flex-1 relative flex flex-col lg:flex-row gap-6 mb-12 scroll-mt-24 transition-all duration-500 ${isMapFullscreen ? 'fixed inset-0 z-[150] bg-white !m-0 !p-6' : ''}`}>
+              <AnimatePresence mode="wait">
+                {view === View.MAP ? (
+                  <motion.div 
+                    key="map-container"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex-1 flex flex-col lg:flex-row gap-6 h-full min-h-[600px]"
+                  >
+                    {/* Sidebar List */}
+                    <motion.div 
+                      initial={false}
+                      animate={{ width: isSidebarOpen ? '380px' : '0px', opacity: isSidebarOpen ? 1 : 0 }}
+                      className="hidden lg:flex flex-col bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative"
+                    >
+                      <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <div>
+                          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                            <Filter size={16} className="text-brand-primary" /> Directorio
+                          </h3>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredInitiatives.length} Resultados</p>
                         </div>
-                        <h4 className="font-bold text-slate-800 line-clamp-1">{initiative.name}</h4>
-                        <p className="text-xs text-slate-500 line-clamp-2 mt-1">{initiative.description}</p>
-                      </button>
-                    ))}
-                    {filteredInitiatives.length === 0 && (
-                      <div className="text-center py-20">
-                        <Database size={40} className="mx-auto text-slate-200 mb-4" />
-                        <p className="text-slate-400 font-medium">No se encontraron iniciativas</p>
+                        <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                          <ChevronLeft size={20} />
+                        </button>
                       </div>
+                      
+                      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                        {filteredInitiatives.map(initiative => (
+                          <div 
+                            key={initiative.id}
+                            className={`w-full text-left p-4 rounded-2xl border transition-all group relative ${selectedInitiative?.id === initiative.id ? 'border-brand-primary bg-brand-light font-medium' : 'border-slate-100 hover:border-brand-primary/30 hover:bg-slate-50'}`}
+                          >
+                            <div onClick={() => setSelectedInitiative(initiative)} className="cursor-pointer">
+                              <div className="flex items-center gap-3 mb-2">
+                                <img 
+                                  src={`https://flagcdn.com/w20/${initiative.country.toLowerCase()}.png`} 
+                                  alt="flag" 
+                                  className="w-5 h-auto rounded-sm"
+                                />
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{initiative.category}</span>
+                              </div>
+                              <h4 className="font-bold text-slate-800 line-clamp-1">{initiative.name}</h4>
+                              <p className="text-xs text-slate-500 line-clamp-2 mt-1">{initiative.description}</p>
+                            </div>
+                            
+                            {user?.uid === initiative.userId && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingInitiative(initiative);
+                                  setIsFormOpen(true);
+                                }}
+                                className="absolute top-4 right-4 p-2 bg-white rounded-lg border border-slate-200 text-slate-400 hover:text-brand-primary transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                 <ShieldCheck size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {filteredInitiatives.length === 0 && (
+                          <div className="text-center py-20">
+                            <Database size={40} className="mx-auto text-slate-200 mb-4" />
+                            <p className="text-slate-400 font-medium">No se encontraron iniciativas</p>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+
+                    {!isSidebarOpen && (
+                      <button 
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="hidden lg:flex absolute left-0 top-1/2 -translate-y-1/2 z-50 bg-white p-3 rounded-r-2xl shadow-xl border border-slate-200 border-l-0 text-brand-primary hover:bg-brand-light transition-all"
+                      >
+                        <ChevronRight size={24} />
+                      </button>
                     )}
-                  </div>
-                </motion.div>
 
-                {!isSidebarOpen && (
-                  <button 
-                    onClick={() => setIsSidebarOpen(true)}
-                    className="hidden lg:flex absolute left-0 top-1/2 -translate-y-1/2 z-50 bg-white p-3 rounded-r-2xl shadow-xl border border-slate-200 border-l-0 text-brand-primary hover:bg-brand-light transition-all"
+                    {/* Map Area */}
+                    <div className="flex-1 card relative overflow-hidden bg-slate-100">
+                      <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg border border-slate-200 flex items-center gap-4">
+                         <div>
+                           <p className="text-[10px] font-bold text-brand-primary uppercase tracking-widest leading-none">Explorador Global</p>
+                           <p className="text-xs text-slate-500 font-semibold">{initiatives.length} Iniciativas activas</p>
+                         </div>
+                      </div>
+                      
+                      <div className="absolute top-4 right-4 z-20 flex gap-2">
+                         <button 
+                          onClick={() => setIsMapFullscreen(!isMapFullscreen)}
+                          className={`p-3 rounded-xl shadow-lg border transition-all ${isMapFullscreen ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white/90 backdrop-blur-md text-slate-600 border-slate-200'}`}
+                          title={isMapFullscreen ? "Salir de Pantalla Completa" : "Pantalla Completa"}
+                         >
+                           <MapIcon size={20} />
+                         </button>
+                         <button 
+                          onClick={() => setView(View.DASHBOARD)}
+                          className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-200 text-slate-600 hover:text-brand-primary transition-colors"
+                          title="Ver Dashboard"
+                         >
+                           <LayoutDashboard size={20} />
+                         </button>
+                      </div>
+
+                      <AppMap 
+                        initiatives={filteredInitiatives} 
+                        onSelectInitiative={(i) => setSelectedInitiative(i)}
+                        center={selectedInitiative ? [selectedInitiative.lat, selectedInitiative.lng] : undefined}
+                      />
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="dashboard-container"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="w-full"
                   >
-                    <ChevronRight size={24} />
-                  </button>
+                    <div className="flex justify-between items-center mb-8">
+                      <h2 className="text-3xl font-bold text-slate-800">Panel de Control</h2>
+                      <button 
+                        onClick={() => setView(View.MAP)}
+                        className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                      >
+                        <MapIcon size={18} /> Volver al Mapa
+                      </button>
+                    </div>
+                    <Dashboard 
+                      initiatives={filteredInitiatives} 
+                      user={user}
+                      onAdd={() => setIsFormOpen(true)}
+                      onSelect={(i) => {
+                        setSelectedInitiative(i);
+                        setView(View.MAP);
+                      }}
+                    />
+                  </motion.div>
                 )}
+              </AnimatePresence>
+            </section>
 
-                {/* Map Area */}
-                <div className="flex-1 card relative overflow-hidden bg-slate-100">
-                  <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg border border-slate-200 flex items-center gap-4">
-                     <div>
-                       <p className="text-[10px] font-bold text-brand-primary uppercase tracking-widest leading-none">Explorador Global</p>
-                       <p className="text-xs text-slate-500 font-semibold">{initiatives.length} Iniciativas activas</p>
-                     </div>
-                  </div>
-                  
-                  <div className="absolute top-4 right-4 z-20 flex gap-2">
-                     <button 
-                      onClick={() => setView(View.DASHBOARD)}
-                      className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-200 text-slate-600 hover:text-brand-primary transition-colors"
-                      title="Ver Dashboard"
-                     >
-                       <LayoutDashboard size={20} />
-                     </button>
-                  </div>
+            <VideoSection />
 
-                  <AppMap 
-                    initiatives={filteredInitiatives} 
-                    onSelectInitiative={(i) => setSelectedInitiative(i)}
-                    center={selectedInitiative ? [selectedInitiative.lat, selectedInitiative.lng] : undefined}
-                  />
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="dashboard-container"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="w-full"
-              >
-                <div className="flex justify-between items-center mb-8">
-                  <h2 className="text-3xl font-bold text-slate-800">Panel de Control</h2>
-                  <button 
-                    onClick={() => setView(View.MAP)}
-                    className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-                  >
-                    <MapIcon size={18} /> Volver al Mapa
-                  </button>
-                </div>
-                <Dashboard 
-                  initiatives={filteredInitiatives} 
-                  user={user}
-                  onAdd={() => setIsFormOpen(true)}
-                  onSelect={(i) => {
-                    setSelectedInitiative(i);
-                    setView(View.MAP);
-                  }}
-                />
-              </motion.div>
+            <InitiativeGrid 
+              initiatives={initiatives} 
+              onSelect={(i) => setSelectedInitiative(i)} 
+              currentUser={user}
+              onEdit={(i) => {
+                setEditingInitiative(i);
+                setIsFormOpen(true);
+              }}
+            />
+
+            <ImpactStats />
+
+            <FAQSection />
+
+            <CTASection onRegisterClick={() => setIsFormOpen(true)} />
+
+            {!user && (
+              <div className="mt-12 bg-white rounded-[4rem] p-4 shadow-sm border border-slate-100">
+                <AuthHero onRegisterClick={() => setIsFormOpen(true)} />
+              </div>
             )}
-          </AnimatePresence>
-        </section>
-
-        <VideoSection />
-
-        <InitiativeGrid initiatives={initiatives} onSelect={(i) => setSelectedInitiative(i)} />
-
-        <FAQSection />
-
-        <CTASection onRegisterClick={() => setIsFormOpen(true)} />
-
-        {!user && (
-          <div className="mt-12 bg-white rounded-[4rem] p-4 shadow-sm border border-slate-100">
-            <AuthHero onRegisterClick={() => setIsFormOpen(true)} />
-          </div>
+            
+            <Footer />
+          </>
         )}
-
-        <Footer />
       </main>
 
       {/* Admin Login Modal */}
@@ -906,14 +976,19 @@ export default function App() {
       {/* Modals */}
       <AnimatePresence>
         {isFormOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <InitiativeForm 
-              onSubmit={handleCreateInitiative} 
-              onCancel={() => setIsFormOpen(false)} 
+              onSubmit={handleSaveInitiative} 
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingInitiative(null);
+              }} 
+              initialData={editingInitiative || undefined}
               user={user}
               isSubmitting={submitting}
               onLoginRequest={() => {
                 setIsFormOpen(false);
+                setEditingInitiative(null);
                 handleLogin();
               }}
             />

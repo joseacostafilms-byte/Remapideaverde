@@ -8,7 +8,7 @@ service cloud.firestore {
 
     // 3. Primitives
     function isSignedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
+      return request.auth != null;
     }
 
     function isOwner(userId) {
@@ -28,7 +28,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'joseacostafilms@gmail.com'
+      );
     }
 
     // 2. Validation Blueprints
@@ -80,8 +83,9 @@ service cloud.firestore {
 
     // Admins Collection (Private)
     match /admins/{adminId} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == adminId);
-      allow write: if false; // Only manageable via Firebase Console or Admin SDK
+      // Evitar recursión en isAdmin quitándolo de aquí
+      allow read: if isSignedIn() && (request.auth.uid == adminId || request.auth.token.email == 'joseacostafilms@gmail.com' || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow write: if false; 
     }
   }
 }

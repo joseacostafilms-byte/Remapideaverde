@@ -3,16 +3,20 @@ import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { LogIn, LogOut, User as UserIcon, Leaf, ShieldCheck, Plus, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '@/src/lib/utils';
 
 interface AuthProps {
   user: any;
   isAdmin: boolean;
+  view?: string;
   onAdminClick: () => void;
   onRegisterClick: () => void;
+  onLogoClick?: () => void;
 }
 
-export function Navbar({ user, isAdmin, onAdminClick, onRegisterClick }: AuthProps) {
+export function Navbar({ user, isAdmin, view, onAdminClick, onRegisterClick, onLogoClick }: AuthProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isAdminView = view === 'admin';
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
@@ -34,7 +38,7 @@ export function Navbar({ user, isAdmin, onAdminClick, onRegisterClick }: AuthPro
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20 items-center">
-          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => onLogoClick ? onLogoClick() : window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <img 
               src="https://lh3.googleusercontent.com/d/1BXpvVUDwLx3ddwPiPM7M_lUJu5sT9npo" 
               alt="Idea Verde" 
@@ -48,36 +52,40 @@ export function Navbar({ user, isAdmin, onAdminClick, onRegisterClick }: AuthPro
 
           <div className="flex items-center gap-6">
             <div className="hidden lg:flex items-center gap-6">
-              <button 
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
-              >
-                Inicio
-              </button>
-              <button 
-                onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
-              >
-                Cómo Funciona
-              </button>
-              <button 
-                onClick={() => document.getElementById('explorer-section')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
-              >
-                Mapa
-              </button>
-              <button 
-                onClick={() => document.getElementById('initiatives-section')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
-              >
-                Iniciativas
-              </button>
-              <button 
-                onClick={() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
-              >
-                FAQ
-              </button>
+              {!isAdminView && (
+                <>
+                  <button 
+                    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                    className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
+                  >
+                    Inicio
+                  </button>
+                  <button 
+                    onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
+                  >
+                    Cómo Funciona
+                  </button>
+                  <button 
+                    onClick={() => document.getElementById('explorer-section')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
+                  >
+                    Mapa
+                  </button>
+                  <button 
+                    onClick={() => document.getElementById('initiatives-section')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
+                  >
+                    Iniciativas
+                  </button>
+                  <button 
+                    onClick={() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="text-sm font-bold text-slate-600 hover:text-brand-primary transition-colors"
+                  >
+                    FAQ
+                  </button>
+                </>
+              )}
             </div>
 
             <button 
@@ -87,13 +95,15 @@ export function Navbar({ user, isAdmin, onAdminClick, onRegisterClick }: AuthPro
               <Plus size={18} /> Registrar Iniciativa
             </button>
 
-            <button 
-              onClick={onAdminClick}
-              className="text-[10px] text-slate-400 hover:text-brand-primary transition-colors uppercase font-bold tracking-tighter"
-              title="Panel de Administración"
-            >
-              {isAdmin ? <ShieldCheck size={16} className="text-brand-primary" /> : "Admin"}
-            </button>
+            {!isAdminView && (
+              <button 
+                onClick={onAdminClick}
+                className="text-[10px] text-slate-400 hover:text-brand-primary transition-colors uppercase font-bold tracking-tighter"
+                title="Panel de Administración"
+              >
+                {isAdmin ? <ShieldCheck size={16} className="text-brand-primary" /> : "Admin"}
+              </button>
+            )}
 
             {user ? (
               <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
@@ -144,7 +154,7 @@ export function Navbar({ user, isAdmin, onAdminClick, onRegisterClick }: AuthPro
             className="lg:hidden bg-white border-t border-slate-100 overflow-hidden"
           >
             <div className="px-4 py-8 space-y-6">
-              {[
+              {!isAdminView && [
                 { label: 'Inicio', target: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
                 { label: 'Cómo Funciona', target: 'how-it-works' },
                 { label: 'Mapa de Impacto', target: 'explorer-section' },
@@ -167,7 +177,7 @@ export function Navbar({ user, isAdmin, onAdminClick, onRegisterClick }: AuthPro
                 </button>
               ))}
               
-              <div className="pt-6 border-t border-slate-100 gap-4 flex flex-col">
+              <div className={cn("pt-6 border-t border-slate-100 gap-4 flex flex-col", isAdminView && "border-none pt-0")}>
                 <button 
                   onClick={() => {
                     onRegisterClick();
