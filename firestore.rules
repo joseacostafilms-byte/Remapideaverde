@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Primitives
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // 2. Validation Blueprints
+    function isValidInitiative(data) {
+      return data.keys().hasAll(['name', 'email', 'country', 'scope', 'category', 'lat', 'lng', 'userId', 'status', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.email is string && data.email.size() <= 200
+        && data.country is string && data.country.size() == 2
+        && data.scope in ['Local', 'Regional', 'National', 'International']
+        && data.category is string && data.category.size() <= 100
+        && data.lat is number && data.lng is number
+        && data.userId == request.auth.uid
+        && data.status in ['pending', 'approved', 'rejected']
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    // Initiatives Collection
+    match /initiatives/{initiativeId} {
+      // Lectura: Aprobados son públicos. Dueños y Admins ven todos.
+      allow read: if resource.data.status == 'approved'
+                   || (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
+      
+      allow create: if isSignedIn() 
+        && isValidId(initiativeId) 
+        && isValidInitiative(incoming())
+        && (isAdmin() || incoming().status == 'pending');
+        
+      allow update: if (isSignedIn() && (isOwner(existing().userId) || isAdmin()))
+        && isValidId(initiativeId)
+        && (isAdmin() || (
+            incoming().userId == existing().userId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().status == existing().status
+        ))
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'country', 'scope', 'category', 'address', 'lat', 'lng', 'responsible1', 'responsible2', 'socialFB', 'socialIG', 'socialTikTok', 'description', 'mainProject', 'logoUrl', 'website', 'status', 'updatedAt']))
+        );
+        
+      allow delete: if isSignedIn() && (isOwner(existing().userId) || isAdmin());
+    }
+
+    // User profiles (Public)
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+
+    // Admins Collection (Private)
+    match /admins/{adminId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == adminId);
+      allow write: if false; // Only manageable via Firebase Console or Admin SDK
+    }
+  }
+}

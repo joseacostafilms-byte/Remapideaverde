@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "Initiative": {
+      "title": "Initiative",
+      "description": "An ecological or social initiative recorded in the system.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "description": "Name of the initiative" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "country": { "type": "string", "description": "ISO Country code (e.g., 'MX', 'CO')" },
+        "scope": { 
+          "type": "string", 
+          "enum": ["Local", "Regional", "National", "International"] 
+        },
+        "category": { "type": "string" },
+        "address": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "responsible1": { "type": "string" },
+        "responsible2": { "type": "string" },
+        "socialFB": { "type": "string" },
+        "socialIG": { "type": "string" },
+        "socialTikTok": { "type": "string" },
+        "description": { "type": "string" },
+        "mainProject": { "type": "string" },
+        "userId": { "type": "string" },
+        "status": { 
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "country", "scope", "category", "lat", "lng", "userId", "status"]
+    }
+  },
+  "firestore": {
+    "/initiatives/{initiativeId}": {
+      "schema": "Initiative",
+      "description": "Collection of all ecological and social initiatives."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "title": "User",
+        "type": "object",
+        "properties": {
+          "displayName": { "type": "string" },
+          "email": { "type": "string" },
+          "photoURL": { "type": "string" }
+        }
+      },
+      "description": "Public user profiles."
+    },
+    "/admins/{adminId}": {
+      "schema": {
+        "title": "Admin",
+        "type": "object",
+        "properties": {
+          "email": { "type": "string" },
+          "role": { "type": "string" }
+        }
+      },
+      "description": "Authorized administrators."
+    }
+  }
+}
