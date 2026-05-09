@@ -66,7 +66,7 @@ service cloud.firestore {
         ))
         && incoming().updatedAt == request.time
         && (
-          (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'country', 'scope', 'category', 'address', 'lat', 'lng', 'responsible1', 'responsible2', 'socialFB', 'socialIG', 'socialTikTok', 'description', 'mainProject', 'logoUrl', 'website', 'status', 'updatedAt']))
+          (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'country', 'scope', 'category', 'address', 'lat', 'lng', 'responsible1', 'responsible2', 'socialFB', 'socialIG', 'socialTikTok', 'description', 'mainProject', 'logoUrl', 'website', 'images', 'status', 'updatedAt']))
         );
         
       allow delete: if isSignedIn() && (isOwner(existing().userId) || isAdmin());

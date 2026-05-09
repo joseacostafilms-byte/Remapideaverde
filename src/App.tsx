@@ -30,113 +30,42 @@ interface InitiativeCardProps {
 function AppInitiativeCard({ initiative, onSelect }: InitiativeCardProps) {
   return (
     <motion.div 
-      initial={{ opacity: 0, x: -20 }}
-      whileInView={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: 10 }}
+      whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      className="group relative bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.06)] transition-all duration-500 overflow-hidden flex flex-col lg:flex-row"
+      onClick={() => onSelect(initiative)}
+      className="group bg-white rounded-3xl p-5 border border-slate-100 hover:border-brand-primary/20 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center gap-6"
     >
-      {/* Image Section */}
-      <div className="relative w-full lg:w-72 h-64 lg:h-auto overflow-hidden shrink-0">
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 lg:from-transparent via-transparent to-transparent z-10 opacity-60" />
-        <img 
-          src={`https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&q=80&w=800&${initiative.id}`} 
-          alt={initiative.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
-        />
-        
-        {/* Country Badge (Mobile only, hidden on Desktop list) */}
-        <div className="absolute top-4 left-4 z-20 lg:hidden">
-          <div className="flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full border border-white/30">
-            <img 
-              src={`https://flagcdn.com/w40/${initiative.country.toLowerCase()}.png`} 
-              alt={initiative.country} 
-              className="w-4 h-auto rounded-sm"
-            />
-          </div>
+      {/* Flag Container */}
+      <div className="shrink-0">
+        <div className="w-12 h-8 rounded-lg overflow-hidden shadow-sm border border-slate-50">
+          <img 
+            src={`https://flagcdn.com/w80/${initiative.country.toLowerCase()}.png`} 
+            alt={`Bandera de ${initiative.country}`} 
+            className="w-full h-full object-cover"
+          />
         </div>
       </div>
-      
-      {/* Content Section */}
-      <div className="p-8 lg:p-10 flex-1 flex flex-col justify-between">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="px-4 py-1 bg-brand-light text-brand-primary text-[9px] font-black uppercase tracking-[0.2em] rounded-full">
-                {initiative.category}
-              </span>
-              <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
-                <img 
-                  src={`https://flagcdn.com/w40/${initiative.country.toLowerCase()}.png`} 
-                  alt={initiative.country} 
-                  className="w-4 h-auto rounded-sm"
-                />
-                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">{initiative.country}</span>
-              </div>
-            </div>
-            
-            {initiative.logoUrl && (
-              <div className="w-12 h-12 rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-white shrink-0">
-                <img src={initiative.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-              </div>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <h3 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight leading-tight group-hover:text-brand-primary transition-colors">
-              {initiative.name}
-            </h3>
-            <p className="text-slate-500 text-base font-medium leading-relaxed max-w-2xl">
-              {initiative.description}
-            </p>
-          </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <h3 className="text-xl font-bold text-slate-800 leading-tight group-hover:text-brand-primary transition-colors truncate">
+          {initiative.name}
+        </h3>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            {initiative.category}
+          </span>
+          <span className="text-slate-300">•</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            {initiative.scope}
+          </span>
         </div>
-        
-        <div className="flex flex-wrap items-center justify-between gap-6 pt-8 mt-6 border-t border-slate-50">
-          <div className="flex items-center gap-4">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Redes</span>
-            <div className="flex gap-2">
-              {initiative.socialIG && (
-                <a 
-                  href={initiative.socialIG.startsWith('http') ? initiative.socialIG : `https://instagram.com/${initiative.socialIG.replace('@', '')}`} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-pink-500 hover:bg-pink-50 transition-all group/icon"
-                >
-                  <Instagram size={18} className="group-hover/icon:scale-110 transition-transform" />
-                </a>
-              )}
-              {initiative.socialFB && (
-                <a 
-                  href={initiative.socialFB.startsWith('http') ? initiative.socialFB : `https://facebook.com/${initiative.socialFB}`} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all group/icon"
-                >
-                  <Facebook size={18} className="group-hover/icon:scale-110 transition-transform" />
-                </a>
-              )}
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-            {initiative.website && (
-              <a 
-                href={initiative.website.startsWith('http') ? initiative.website : `https://${initiative.website}`} 
-                target="_blank" 
-                rel="noreferrer" 
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-brand-light text-brand-primary rounded-[1.2rem] text-[11px] font-black uppercase tracking-widest hover:bg-brand-primary hover:text-white transition-all transform active:scale-95"
-              >
-                Sitio Web <ExternalLink size={14} />
-              </a>
-            )}
-            <button 
-              onClick={() => onSelect(initiative)}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-10 py-4 bg-slate-900 text-white rounded-[1.2rem] text-[11px] font-black uppercase tracking-widest hover:bg-brand-primary hover:shadow-xl hover:shadow-brand-primary/20 transition-all transform active:scale-95"
-            >
-              Conocer Proyecto <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+      </div>
+
+      {/* Action (Hidden on mobile, visible on group hover) */}
+      <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 text-slate-400 group-hover:bg-brand-primary group-hover:text-white transition-all">
+        <ChevronRight size={18} />
       </div>
     </motion.div>
   );
@@ -1087,6 +1016,20 @@ export default function App() {
                       {selectedInitiative.description}
                     </p>
                   </div>
+
+                  {/* Project Gallery */}
+                  {selectedInitiative.images && selectedInitiative.images.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest border-b border-slate-100 pb-4">Galería del Proyecto</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {selectedInitiative.images.map((img: string, i: number) => (
+                          <div key={i} className="aspect-video rounded-2xl overflow-hidden border border-slate-100">
+                             <img src={img} alt={`Impacto ${i}`} className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-6">
                     <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest border-b border-slate-100 pb-4">Canales de Contacto</h3>

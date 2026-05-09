@@ -27,6 +27,7 @@ const initiativeSchema = z.object({
   mainProject: z.string().optional(),
   website: z.string().optional(),
   logoUrl: z.string().optional(),
+  images: z.array(z.string()).optional(),
 });
 
 type FormData = z.infer<typeof initiativeSchema>;
@@ -55,21 +56,86 @@ function LocationMarker({ position, setPosition }: { position: [number, number],
 export default function InitiativeForm({ onSubmit, onCancel, user, onLoginRequest, initialData, isSubmitting }: FormProps) {
   const [step, setStep] = useState(1);
   const [logoPreview, setLogoPreview] = useState<string | null>(initialData?.logoUrl || null);
+  const [projectImages, setProjectImages] = useState<string[]>(initialData?.images || []);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImage = (file: File, maxWidth: number = 800, maxHeight: number = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height *= maxWidth / width;
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width *= maxHeight / height;
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          // Compress to JPEG with 0.6 quality to stay under Firestore 1MB limit for multiple images
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setIsUploading(true);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setLogoPreview(base64String);
-        setValue('logoUrl', base64String);
+      try {
+        const compressed = await compressImage(file, 400, 400);
+        setLogoPreview(compressed);
+        setValue('logoUrl', compressed);
+      } catch (err) {
+        console.error("Logo upload error", err);
+      } finally {
         setIsUploading(false);
-      };
-      reader.readAsDataURL(file);
+      }
     }
+  };
+
+  const handleProjectImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setIsUploading(true);
+      const remainingSlots = 3 - projectImages.length;
+      const filesToProcess = files.slice(0, remainingSlots);
+      
+      try {
+        const compressedImages = await Promise.all(
+          filesToProcess.map(file => compressImage(file))
+        );
+        const newImages = [...projectImages, ...compressedImages].slice(0, 3);
+        setProjectImages(newImages);
+        setValue('images', newImages);
+      } catch (err) {
+        console.error("Images upload error", err);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const removeProjectImage = (index: number) => {
+    const newImages = projectImages.filter((_, i) => i !== index);
+    setProjectImages(newImages);
+    setValue('images', newImages);
   };
 
   const removeLogo = () => {
@@ -341,6 +407,38 @@ export default function InitiativeForm({ onSubmit, onCancel, user, onLoginReques
                 <h3 className="text-lg font-bold text-slate-800">Detalles Finales</h3>
                 <p className="text-slate-500 text-sm">Cuéntanos el impacto real de tu proyecto.</p>
               </div>
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block">Fotos del Proyecto (Máx. 3)</label>
+                  <p className="text-slate-500 text-sm">Agrega imágenes que muestren la labor de la iniciativa.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {projectImages.map((img, idx) => (
+                    <div key={idx} className="relative group aspect-video rounded-2xl overflow-hidden border border-slate-100 bg-slate-50">
+                      <img src={img} className="w-full h-full object-cover" alt={`Project ${idx + 1}`} />
+                      <button 
+                        type="button"
+                        onClick={() => removeProjectImage(idx)}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {projectImages.length < 3 && (
+                    <label className="aspect-video rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-brand-primary hover:bg-brand-primary/5 transition-all group">
+                      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-400 group-hover:text-brand-primary transition-all">
+                        <Upload size={20} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-brand-primary transition-all">Subir Foto</span>
+                      <input type="file" multiple accept="image/*" className="hidden" onChange={handleProjectImagesUpload} />
+                    </label>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Descripción del Impacto</label>
                 <textarea 

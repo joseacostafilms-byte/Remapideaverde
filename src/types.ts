@@ -31,6 +31,7 @@ export interface Initiative {
   mainProject?: string;
   website?: string;
   logoUrl?: string;
+  images?: string[];
   userId: string;
   status: InitiativeStatus;
   createdAt: any;

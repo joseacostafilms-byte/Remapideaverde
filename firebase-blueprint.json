@@ -25,6 +25,12 @@
         "socialTikTok": { "type": "string" },
         "description": { "type": "string" },
         "mainProject": { "type": "string" },
+        "images": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "maxItems": 3,
+          "description": "Up to 3 project-related images (optimized Base64)"
+        },
         "userId": { "type": "string" },
         "status": { 
           "type": "string",
